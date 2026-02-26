@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package test.v1;
+
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply);
+  rpc SayGoodbye (HelloRequest) returns (HelloReply);
+}
+
+service Echo {
+  rpc Echo (EchoRequest) returns (EchoReply);
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
+
+message EchoRequest {
+  string payload = 1;
+  int32 count = 2;
+}
+
+message EchoReply {
+  string payload = 1;
+}
+
+enum Status {
+  STATUS_UNKNOWN = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_INACTIVE = 2;
+}

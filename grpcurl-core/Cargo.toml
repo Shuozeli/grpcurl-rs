@@ -1,0 +1,52 @@
+[package]
+name = "grpcurl-core"
+version = "0.2.0"
+edition = "2021"
+description = "Core library for grpcurl - programmatic gRPC server introspection and invocation"
+license = "MIT"
+repository = "https://github.com/Shuozeli/grpcurl-rs"
+keywords = ["grpc", "protobuf", "reflection"]
+categories = ["network-programming"]
+readme = "../README.md"
+rust-version = "1.80"
+
+[dependencies]
+# Async runtime (needed for connection, reflection)
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync"] }
+
+# gRPC
+tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots", "gzip"] }
+tonic-reflection = "0.14"
+tokio-stream = "0.1"
+
+# Protobuf
+prost = "0.14"
+prost-types = "0.14"
+prost-reflect = { version = "0.16", features = ["text-format", "serde"] }
+
+# Serialization
+serde = "1"
+serde_json = "1"
+base64 = "0.22"
+
+# Proto file parsing
+protox = "0.9"
+
+# HTTP types (for PathAndQuery)
+http = "1"
+
+# TLS (for custom connectors: --insecure, --unix with TLS)
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rustls-native-certs = "0.8"
+
+# Transport (for custom connectors: Unix sockets, insecure TLS)
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower = { version = "0.5", features = ["util"] }
+
+# Async trait (for dyn DescriptorSource with async methods)
+async-trait = "0.1"
+
+# Utilities
+regex = "1"

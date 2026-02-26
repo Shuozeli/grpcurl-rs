@@ -1,0 +1,26 @@
+[package]
+name = "bankdemo"
+version = "0.1.0"
+edition = "2021"
+description = "Bank demo gRPC server - migrated from Go bankdemo (Gophercon 2018)"
+
+[[bin]]
+name = "bankdemo"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time", "sync"] }
+tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots"] }
+tonic-prost = "0.14"
+tonic-reflection = "0.14"
+tokio-stream = "0.1"
+prost = "0.14"
+prost-types = "0.14"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio-util = "0.7"
+futures-core = "0.3"
+
+[build-dependencies]
+tonic-prost-build = "0.14"

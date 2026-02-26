@@ -1,0 +1,231 @@
+// Test server proto for grpcurl verification.
+// The `testing` package matches the Go grpcurl test.proto exactly
+// for behavioral parity testing.
+
+syntax = "proto3";
+
+package testing;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message Empty {}
+
+// The type of payload that should be returned.
+enum PayloadType {
+  // Compressable text format.
+  COMPRESSABLE = 0;
+
+  // Uncompressable binary format.
+  UNCOMPRESSABLE = 1;
+
+  // Randomly chosen from all other formats defined in this enum.
+  RANDOM = 2;
+}
+
+// A block of data, to simply increase gRPC message size.
+message Payload {
+  // The type of data in body.
+  PayloadType type = 1;
+  // Primary contents of payload.
+  bytes body = 2;
+}
+
+// A protobuf representation for grpc status. This is used by test
+// clients to specify a status that the server should attempt to return.
+message EchoStatus {
+  int32 code = 1;
+  string message = 2;
+}
+
+// Unary request.
+message SimpleRequest {
+  // Desired payload type in the response from the server.
+  // If response_type is RANDOM, server randomly chooses one from other formats.
+  PayloadType response_type = 1;
+
+  // Desired payload size in the response from the server.
+  // If response_type is COMPRESSABLE, this denotes the size before compression.
+  int32 response_size = 2;
+
+  // Optional input payload sent along with the request.
+  Payload payload = 3;
+
+  // Whether SimpleResponse should include username.
+  bool fill_username = 4;
+
+  // Whether SimpleResponse should include OAuth scope.
+  bool fill_oauth_scope = 5;
+
+  // Whether server should return a given status
+  EchoStatus response_status = 7;
+}
+
+// Unary response, as configured by the request.
+message SimpleResponse {
+  // Payload to increase message size.
+  Payload payload = 1;
+
+  // The user the request came from, for verifying authentication was
+  // successful when the client expected it.
+  string username = 2;
+
+  // OAuth scope.
+  string oauth_scope = 3;
+}
+
+// Client-streaming request.
+message StreamingInputCallRequest {
+  // Optional input payload sent along with the request.
+  Payload payload = 1;
+
+  // Not expecting any payload from the response.
+}
+
+// Client-streaming response.
+message StreamingInputCallResponse {
+  // Aggregated size of payloads received from the client.
+  int32 aggregated_payload_size = 1;
+}
+
+// Configuration for a particular response.
+message ResponseParameters {
+  // Desired payload sizes in responses from the server.
+  // If response_type is COMPRESSABLE, this denotes the size before compression.
+  int32 size = 1;
+
+  // Desired interval between consecutive responses in the response stream in
+  // microseconds.
+  int32 interval_us = 2;
+}
+
+// Server-streaming request.
+message StreamingOutputCallRequest {
+  // Desired payload type in the response from the server.
+  // If response_type is RANDOM, the payload from each response in the stream
+  // might be of different types. This is to simulate a mixed type of payload
+  // stream.
+  PayloadType response_type = 1;
+
+  // Configuration for each expected response message.
+  repeated ResponseParameters response_parameters = 2;
+
+  // Optional input payload sent along with the request.
+  Payload payload = 3;
+
+  // Whether server should return a given status
+  EchoStatus response_status = 7;
+}
+
+// Server-streaming response, as configured by the request and parameters.
+message StreamingOutputCallResponse {
+  // Payload to increase response size.
+  Payload payload = 1;
+}
+
+// A simple service to test the various types of RPCs and experiment with
+// performance with various types of payload.
+service TestService {
+  // One empty request followed by one empty response.
+  rpc EmptyCall(Empty) returns (Empty);
+
+  // One request followed by one response.
+  // The server returns the client payload as-is.
+  rpc UnaryCall(SimpleRequest) returns (SimpleResponse);
+
+  // One request followed by a sequence of responses (streamed download).
+  // The server returns the payload with client desired type and sizes.
+  rpc StreamingOutputCall(StreamingOutputCallRequest)
+      returns (stream StreamingOutputCallResponse);
+
+  // A sequence of requests followed by one response (streamed upload).
+  // The server returns the aggregated size of client payload as the result.
+  rpc StreamingInputCall(stream StreamingInputCallRequest)
+      returns (StreamingInputCallResponse);
+
+  // A sequence of requests with each request served by the server immediately.
+  // As one request could lead to multiple responses, this interface
+  // demonstrates the idea of full duplexing.
+  rpc FullDuplexCall(stream StreamingOutputCallRequest)
+      returns (stream StreamingOutputCallResponse);
+
+  // A sequence of requests followed by a sequence of responses.
+  // The server buffers all the client requests and then serves them in order. A
+  // stream of responses are returned to the client when the server starts with
+  // first request.
+  rpc HalfDuplexCall(stream StreamingOutputCallRequest)
+      returns (stream StreamingOutputCallResponse);
+}
+
+// A simple service NOT implemented at servers so clients can test for
+// that case.
+service UnimplementedService {
+  // A call that no server should implement
+  rpc UnimplementedCall(Empty) returns (Empty);
+}
+
+// ============================================================
+// Additional types for comprehensive describe / msg-template testing
+// ============================================================
+
+// Exercises all scalar types, nested messages, map, oneof, repeated.
+message ComplexMessage {
+  // Scalar types
+  double double_field = 1;
+  float float_field = 2;
+  int32 int32_field = 3;
+  int64 int64_field = 4;
+  uint32 uint32_field = 5;
+  uint64 uint64_field = 6;
+  sint32 sint32_field = 7;
+  sint64 sint64_field = 8;
+  fixed32 fixed32_field = 9;
+  fixed64 fixed64_field = 10;
+  sfixed32 sfixed32_field = 11;
+  sfixed64 sfixed64_field = 12;
+  bool bool_field = 13;
+  string string_field = 14;
+  bytes bytes_field = 15;
+
+  // Enum field
+  PayloadType enum_field = 16;
+
+  // Nested message
+  message NestedMessage {
+    string name = 1;
+    int32 value = 2;
+  }
+  NestedMessage nested = 17;
+
+  // Repeated fields
+  repeated string tags = 18;
+  repeated NestedMessage items = 19;
+
+  // Map fields
+  map<string, string> labels = 20;
+  map<int32, NestedMessage> nested_map = 21;
+
+  // Oneof
+  oneof test_oneof {
+    string oneof_string = 22;
+    int32 oneof_int = 23;
+    NestedMessage oneof_nested = 24;
+  }
+}
+
+// Exercises well-known types for describe/msg-template.
+message WellKnownTypesMessage {
+  google.protobuf.Timestamp timestamp_field = 1;
+  google.protobuf.Any any_field = 2;
+  google.protobuf.Struct struct_field = 3;
+  google.protobuf.Value value_field = 4;
+  google.protobuf.Empty empty_field = 5;
+}
+
+// Service exercising complex types.
+service ComplexService {
+  rpc GetComplex(ComplexMessage) returns (ComplexMessage);
+  rpc GetWellKnown(WellKnownTypesMessage) returns (WellKnownTypesMessage);
+}

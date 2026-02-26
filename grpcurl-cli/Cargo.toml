@@ -1,0 +1,30 @@
+[package]
+name = "grpcurl"
+version = "0.2.0"
+edition = "2021"
+description = "A Rust port of grpcurl - a command-line tool for interacting with gRPC servers"
+license = "MIT"
+repository = "https://github.com/Shuozeli/grpcurl-rs"
+keywords = ["grpc", "cli", "protobuf", "reflection"]
+categories = ["command-line-utilities", "network-programming"]
+readme = "../README.md"
+rust-version = "1.80"
+
+[[bin]]
+name = "grpcurl"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net"] }
+
+# Core library
+grpcurl-core = { version = "0.2.0", path = "../grpcurl-core" }
+
+# gRPC (for tonic::Code in exit code handling)
+tonic = { version = "0.14" }
+
+[dev-dependencies]
+tempfile = "3"
