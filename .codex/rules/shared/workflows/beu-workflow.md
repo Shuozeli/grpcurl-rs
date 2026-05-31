@@ -5,9 +5,9 @@ across sessions and survive conversation compaction.
 
 ## When to Use beu
 
-- Any project with a `.beu/` directory should use beu for tracking
-- At session start: run `beu resume` to restore context
-- At session end or before pausing: run `beu pause "checkpoint message"`
+- Any project with a project-memory directory should use beu for tracking
+- At session start: run the resume command for beu to restore context
+- At session end or before pausing: run the pause command for beu with a checkpoint message
 - When starting multi-step work: create tasks with `beu task add`
 - When making architectural decisions: record with `beu state set --category decision`
 - When hitting blockers: record with `beu state set --category blocker`
@@ -16,11 +16,11 @@ across sessions and survive conversation compaction.
 ## Session Protocol
 
 ```bash
-beu resume              # Check checkpoint, blockers, focus items
+beu <resume-command>    # Check checkpoint, blockers, focus items
 beu journal open        # Start interaction ledger
 # ... do work ...
 beu check               # Verify docs are up to date (if configured)
-beu pause "state desc"  # Save checkpoint before stopping
+beu <pause-command> "state desc"  # Save checkpoint before stopping
 ```
 
 ## Module Quick Reference
@@ -83,7 +83,7 @@ beu export --all        # Export all data as JSON
 
 ## Configuration
 
-`.beu/config.yml` controls which modules are active:
+The project-memory config file controls which modules are active:
 
 ```yaml
 modules:
