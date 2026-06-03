@@ -468,9 +468,7 @@ fn default_value_for_kind(field: &prost_reflect::FieldDescriptor) -> prost_refle
 }
 
 /// Type alias for a response formatter function.
-///
-/// Equivalent to Go's `Formatter` type (format.go:129).
-pub type Formatter = Box<dyn Fn(&DynamicMessage) -> Result<String>>;
+pub type Formatter = Box<dyn Fn(&DynamicMessage) -> Result<String> + Send>;
 
 /// Create a JSON response formatter.
 ///
@@ -571,7 +569,7 @@ pub fn status_code_name(code: tonic::Code) -> &'static str {
     }
 }
 
-/// Print a gRPC status to stderr in the standard format.
+/// Print a gRPC status to diagnostic output in the standard format.
 ///
 /// Equivalent to Go's `PrintStatus()` (format.go:517-554).
 ///
@@ -581,112 +579,46 @@ pub fn status_code_name(code: tonic::Code) -> &'static str {
 ///   Code: <CODE_NAME>
 ///   Message: <message>
 /// ```
-pub fn print_status(status: &tonic::Status, formatter: Option<&Formatter>) {
-    write_status(&mut io::stderr(), status, formatter);
-}
-
-/// Write a gRPC status to the given writer.
-///
-/// Allows callers to direct status output to any writer (stderr, buffer, etc.)
-/// rather than hardcoding to stderr. The `print_status` function uses this
-/// with `io::stderr()`.
-pub fn write_status(w: &mut dyn io::Write, status: &tonic::Status, formatter: Option<&Formatter>) {
+pub fn print_status(status: &tonic::Status, output: &mut crate::output::Output) {
     if status.code() == tonic::Code::Ok {
-        let _ = writeln!(w, "OK");
+        output.eprintln("OK");
         return;
     }
-    let _ = writeln!(w, "ERROR:");
-    let _ = writeln!(w, "  Code: {}", status_code_name(status.code()));
-    let _ = writeln!(w, "  Message: {}", status.message());
-
-    // Parse status details from grpc-status-details-bin trailer.
-    // This contains a serialized google.rpc.Status with Any-typed details.
-    let details_bytes = status.details();
-    if details_bytes.is_empty() {
-        return;
-    }
-
-    // Decode as google.rpc.Status (manually, since prost_types doesn't include it).
-    // The wire format is: field 1 (int32 code), field 2 (string message),
-    // field 3 (repeated google.protobuf.Any details).
-    // We only need the details field, so we decode the Any messages directly.
-    let any_messages = decode_status_details(details_bytes);
-    if any_messages.is_empty() {
-        return;
-    }
-
-    for (i, any) in any_messages.iter().enumerate() {
-        if i == 0 {
-            let _ = writeln!(w, "  Details:");
-        }
-        // Try to format the Any message using the formatter if available
-        let formatted = formatter.and_then(|fmt| format_any_detail(any, fmt).ok());
-
-        if let Some(text) = formatted {
-            let _ = writeln!(w, "  - {}", any.type_url);
-            for line in text.lines() {
-                let _ = writeln!(w, "      {line}");
-            }
-        } else {
-            // Fallback: show type URL and raw base64 value
-            let _ = writeln!(w, "  - {} ({} bytes)", any.type_url, any.value.len());
-        }
+    output.eprintln("ERROR:");
+    crate::err!(output, "  Code: {}", status_code_name(status.code()));
+    crate::err!(output, "  Message: {}", status.message());
+    if !status.details().is_empty() {
+        crate::err!(
+            output,
+            "  Details (raw): {} bytes (detail parsing not yet implemented)",
+            status.details().len()
+        );
     }
 }
 
 /// Decode the details field (field 3, repeated Any) from a serialized google.rpc.Status.
 ///
-/// google.rpc.Status wire format:
-///   field 1: int32 code
-///   field 2: string message
-///   field 3: repeated google.protobuf.Any
-///
-/// google.protobuf.Any wire format:
-///   field 1: string type_url
-///   field 2: bytes value
-fn decode_status_details(data: &[u8]) -> Vec<prost_types::Any> {
-    use prost::Message;
-
-    // Use prost's low-level decoding by defining the Status message structure
-    #[derive(Message, Clone)]
-    struct RpcStatus {
-        #[prost(int32, tag = "1")]
-        _code: i32,
-        #[prost(string, tag = "2")]
-        _message: String,
-        #[prost(message, repeated, tag = "3")]
-        details: Vec<prost_types::Any>,
+/// When `format` is `Format::Json`, outputs a JSON object to diagnostic output.
+/// When `format` is `Format::Text`, delegates to `print_status`.
+pub fn print_formatted_status(
+    status: &tonic::Status,
+    format: Format,
+    output: &mut crate::output::Output,
+) {
+    match format {
+        Format::Json => {
+            let code_name = status_code_name(status.code());
+            let message = status.message();
+            crate::err!(
+                output,
+                "{{\n  \"code\": \"{code_name}\",\n  \"message\": \"{}\"\n}}",
+                message.replace('\\', "\\\\").replace('"', "\\\"")
+            );
+        }
+        Format::Text => {
+            print_status(status, output);
+        }
     }
-
-    match RpcStatus::decode(data) {
-        Ok(status) => status.details,
-        Err(_) => Vec::new(),
-    }
-}
-
-/// Attempt to format an Any-typed detail message as JSON.
-///
-/// Uses a well-known types descriptor pool to decode common error detail types
-/// like google.rpc.ErrorInfo, google.rpc.BadRequest, etc.
-fn format_any_detail(
-    any: &prost_types::Any,
-    formatter: &Formatter,
-) -> std::result::Result<String, Box<dyn std::error::Error>> {
-    // Extract the message type name from the type_url
-    let type_name = any
-        .type_url
-        .rsplit_once('/')
-        .map(|(_, name)| name)
-        .unwrap_or(&any.type_url);
-
-    // Try to find the message type in a pool with well-known types
-    let pool = prost_reflect::DescriptorPool::global();
-    let msg_desc = pool.get_message_by_name(type_name).ok_or("unknown type")?;
-
-    let msg = DynamicMessage::decode(msg_desc, any.value.as_slice())
-        .map_err(|e| format!("failed to decode detail: {e}"))?;
-
-    (formatter)(&msg).map_err(|e| e.into())
 }
 
 #[cfg(test)]

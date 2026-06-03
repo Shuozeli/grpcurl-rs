@@ -9,6 +9,7 @@ use grpcurl_core::connection::{self, ConnectionConfig};
 use grpcurl_core::descriptor::{self, DescriptorSource};
 use grpcurl_core::format;
 use grpcurl_core::metadata;
+use grpcurl_core::output::Output;
 use grpcurl_core::reflection;
 
 /// Exit code offset to avoid conflicts with gRPC status codes.
@@ -30,6 +31,7 @@ async fn main() {
     };
 
     let conn_config = cli.connection_config();
+    let mut output = Output::stdio();
 
     match parsed.command {
         Command::List => {
@@ -43,9 +45,12 @@ async fn main() {
                     }
                 };
 
-            if let Err(err) =
-                grpcurl_core::commands::list::run_list(source.as_ref(), parsed.symbol.as_deref())
-                    .await
+            if let Err(err) = grpcurl_core::commands::list::run_list(
+                source.as_ref(),
+                parsed.symbol.as_deref(),
+                &mut output,
+            )
+            .await
             {
                 match parsed.symbol.as_deref() {
                     Some(svc) => eprintln!("Failed to list methods for service \"{svc}\": {err}"),
@@ -79,6 +84,7 @@ async fn main() {
                 parsed.symbol.as_deref(),
                 &format_options,
                 cli.msg_template,
+                &mut output,
             )
             .await
             {
@@ -114,7 +120,6 @@ async fn main() {
                 }
             };
 
-            // Create a channel for the RPC invocation
             let channel = match connection::create_channel(&conn_config, address).await {
                 Ok(ch) => ch,
                 Err(e) => {
@@ -130,12 +135,11 @@ async fn main() {
                 channel,
                 symbol,
                 source.as_ref(),
+                &mut output,
             )
             .await
             {
                 Ok(invoke_result) => {
-                    // Verbose summary: "Sent N request(s) and received M response(s)"
-                    // Go prints this to stdout (fmt.Printf in main.go)
                     if verbosity > 0 {
                         let req_word = if invoke_result.num_requests == 1 {
                             "request"
@@ -147,7 +151,8 @@ async fn main() {
                         } else {
                             "responses"
                         };
-                        println!(
+                        grpcurl_core::out!(
+                            output,
                             "Sent {} {} and received {} {}",
                             invoke_result.num_requests,
                             req_word,
@@ -156,18 +161,16 @@ async fn main() {
                         );
                     }
 
-                    // Handle gRPC status
                     if let Some(ref status) = invoke_result.status {
                         if status.code() != tonic::Code::Ok {
                             if cli.format_error {
-                                // Format the error using the format flag
-                                eprintln!(
-                                    "ERROR:\n  Code: {}\n  Message: {}",
-                                    format::status_code_name(status.code()),
-                                    status.message()
+                                format::print_formatted_status(
+                                    status,
+                                    invoke_config.format,
+                                    &mut output,
                                 );
                             } else {
-                                format::print_status(status, None);
+                                format::print_status(status, &mut output);
                             }
                             process::exit(STATUS_CODE_OFFSET + status.code() as i32);
                         }
@@ -221,18 +224,11 @@ async fn export_proto_files(cli: &Cli, source: &dyn DescriptorSource, symbols: &
 }
 
 /// Create a descriptor source from CLI flags.
-///
-/// Matching Go's behavior:
-/// - If proto/protoset files are specified AND an address is available with
-///   reflection enabled, creates a CompositeSource (reflection + file fallback)
-/// - If only proto/protoset files: uses FileSource
-/// - If only address: uses ServerSource (reflection)
 async fn create_descriptor_source(
     cli: &Cli,
     conn_config: &ConnectionConfig,
     address: Option<&str>,
 ) -> grpcurl_core::error::Result<Box<dyn DescriptorSource>> {
-    // Build file-based source if proto/protoset files are specified
     let file_source: Option<Box<dyn DescriptorSource>> = if !cli.protoset.is_empty() {
         Some(Box::new(descriptor::descriptor_source_from_protosets(
             &cli.protoset,
@@ -246,9 +242,6 @@ async fn create_descriptor_source(
         None
     };
 
-    // Build reflection source if address is available and reflection is not disabled.
-    // When proto/protoset files are provided, auto-disable reflection unless
-    // explicitly enabled with --use-reflection=true (matching Go behavior).
     let has_proto_files = !cli.protoset.is_empty() || !cli.proto.is_empty();
     let use_reflection = match cli.use_reflection {
         Some(true) => true,
@@ -259,7 +252,6 @@ async fn create_descriptor_source(
         if use_reflection {
             let channel = connection::create_channel(conn_config, addr).await?;
 
-            // Build reflection metadata: -H (all) + --reflect-header (reflection-only)
             let mut reflect_headers: Vec<String> = cli.header.clone();
             reflect_headers.extend(cli.reflect_header.clone());
             if cli.expand_headers {
@@ -281,7 +273,6 @@ async fn create_descriptor_source(
         None
     };
 
-    // Combine sources: composite when both available, otherwise use whichever exists
     match (reflection_source, file_source) {
         (Some(reflection), Some(file)) => {
             Ok(Box::new(descriptor::CompositeSource::new(reflection, file)))

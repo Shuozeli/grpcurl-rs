@@ -6,4 +6,5 @@ pub mod descriptor_text;
 pub mod error;
 pub mod format;
 pub mod metadata;
+pub mod output;
 pub mod reflection;

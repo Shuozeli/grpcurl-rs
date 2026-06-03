@@ -50,3 +50,4 @@ async-trait = "0.1"
 
 # Utilities
 regex = "1"
+thiserror = "2"

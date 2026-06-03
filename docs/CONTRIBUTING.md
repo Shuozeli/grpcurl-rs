@@ -8,7 +8,7 @@
 
 ```bash
 git clone https://github.com/shuozeli/grpcurl-rs.git
-cd grpcurl-rs
+cd grpcurl-rs/grpcurl-rs
 cargo build
 ```
 
@@ -55,7 +55,7 @@ cargo test -- --include-ignored
 
 ### Test Categories
 
-#### Unit Tests (57 tests)
+#### Unit Tests (46 tests)
 
 Located in `grpcurl-core/src/` modules (`#[cfg(test)]` blocks). These test
 internal logic: argument validation, header parsing, JSON formatting, descriptor
@@ -77,8 +77,8 @@ verify CLI behavior without a running server:
 | `cli_args.rs` | 8 | Valid parsing, single/double-dash compat, warnings |
 | `protoset_list.rs` | 3 | `list` from protoset files |
 | `protoset_describe.rs` | 12 | `describe` + `msg-template` from protoset files |
-| `protoset_export.rs` | 3 | `-protoset-out` offline export |
-| `proto_export.rs` | 2 | `-proto-out-dir` offline export |
+| `protoset_export.rs` | 3 (+1 server) | `-protoset-out` offline export |
+| `proto_export.rs` | 2 (+1 server) | `-proto-out-dir` offline export |
 
 ```bash
 cargo test -p grpcurl --test cli_help --test cli_validation --test cli_args \
@@ -102,8 +102,8 @@ automatically starts and stops its own testserver instance on an ephemeral port
 | `server_metadata.rs` | 6 | Header echo, fail-early, fail-late |
 | `server_verbose.rs` | 6 | Verbose (`-v`) and very-verbose (`--vv`) output |
 | `server_advanced.rs` | 4 | Complex types, max-msg-sz, stdin (`-d @`) |
-| `protoset_export.rs` | 1 | `-protoset-out` via reflection |
-| `proto_export.rs` | 1 | `-proto-out-dir` via reflection |
+| `protoset_export.rs` | 1 | `-protoset-out` via reflection (in same file as offline tests) |
+| `proto_export.rs` | 1 | `-proto-out-dir` via reflection (in same file as offline tests) |
 
 ```bash
 # Run server tests only
